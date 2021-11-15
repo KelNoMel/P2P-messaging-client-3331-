@@ -11,11 +11,11 @@ from socket import *
 import sys
 
 #Server would be running on the same host as Client
-if len(sys.argv) != 3:
+if len(sys.argv) != 2:
     print("\n===== Error usage, python3 TCPClient3.py SERVER_IP SERVER_PORT ======\n");
     exit(0);
-serverHost = sys.argv[1]
-serverPort = int(sys.argv[2])
+serverHost = "127.0.0.1"
+serverPort = int(sys.argv[1])
 serverAddress = (serverHost, serverPort)
 
 # define a socket for the client side, it would be used to communicate with the server

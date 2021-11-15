@@ -9,6 +9,7 @@
 from socket import *
 from threading import Thread
 import sys, select
+import re
 
 # acquire server host and port from command line parameter
 if len(sys.argv) != 2:
@@ -48,6 +49,27 @@ class ClientThread(Thread):
             data = self.clientSocket.recv(1024)
             message = data.decode()
             
+            if message == '':
+                self.clientAlive = False
+                message = 'empty message'
+                print("[send] " + message)
+                self.clientSocket.send(message.encode())
+                break
+
+            # Get the first argument of message, this will be the client command
+            command = re.search("[a-zA-Z1-9]*", message)
+            print("Client", clientAddress, "sends command", command.group())
+
+            if (command == "login"):
+                print("[recv] Login request")
+                self.processLogin()
+            else:
+                print("[recv] Unknown Message '", message, "'")
+                message = 'unknown message'
+                print('[send] ' + message)
+                self.clientSocket.send(message.encode())
+
+            """
             # if the message from client is empty, the client would be off-line then set the client as offline (alive=Flase)
             if message == '':
                 self.clientAlive = False
@@ -68,6 +90,7 @@ class ClientThread(Thread):
                 print("[send] Cannot understand this message")
                 message = 'Cannot understand this message'
                 self.clientSocket.send(message.encode())
+            """
     
     """
         You can create more customized APIs here, e.g., logic for processing user authentication
@@ -76,7 +99,7 @@ class ClientThread(Thread):
             message = 'user credentials request'
             self.clientSocket.send(message.encode())
     """
-    def process_login(self):
+    def processLogin(self):
         message = 'user credentials request'
         print('[send] ' + message)
         self.clientSocket.send(message.encode())

@@ -43,11 +43,11 @@ class Server:
 
         # Dictionary of locked users
         self.lockedUsers = {}
-        self.lockPeriod = 5
+        self.lockPeriod = 120
 
         # Dictionary of user log, contains the time of last interaction by users
         self.userLog = {}
-        self.activePeriod = 120
+        self.activePeriod = 5
         
 
     def run(self):
@@ -81,6 +81,7 @@ class ClientThread(Thread):
         self.clientAlive = True
         
     def run(self):
+        # Login the client
         self.processLogin()
         message = ''
         
@@ -101,37 +102,41 @@ class ClientThread(Thread):
             command = command.group()
             print("Client", self.clientAddress, "sends command", command)
 
-            if (command == "login"):
-                print("[recv] Login request")
-                self.processLogin()
+            if (command == "logout"):
+                message = 'unknown message'
+                print("[recv] logout request")
+                self.clientSocket.sendall(message.encode())
+                break
             else:
                 print("[recv] Unknown Message '", message, "'")
                 message = 'unknown message'
                 print('[send] ' + message)
                 self.clientSocket.send(message.encode())
 
-            """
-            # if the message from client is empty, the client would be off-line then set the client as offline (alive=Flase)
-            if message == '':
-                self.clientAlive = False
-                print("===== the user disconnected - ", clientAddress)
-                break
-            
-            # handle message from the client
-            if message == 'login':
-                print("[recv] New login request")
-                self.process_login()
-            elif message == 'download':
-                print("[recv] Download request")
-                message = 'download filename'
-                print("[send] " + message)
-                self.clientSocket.send(message.encode())
-            else:
-                print("[recv] " + message)
-                print("[send] Cannot understand this message")
-                message = 'Cannot understand this message'
-                self.clientSocket.send(message.encode())
-            """
+        print("thread closed")
+
+        """
+        # if the message from client is empty, the client would be off-line then set the client as offline (alive=Flase)
+        if message == '':
+            self.clientAlive = False
+            print("===== the user disconnected - ", clientAddress)
+            break
+        
+        # handle message from the client
+        if message == 'login':
+            print("[recv] New login request")
+            self.process_login()
+        elif message == 'download':
+            print("[recv] Download request")
+            message = 'download filename'
+            print("[send] " + message)
+            self.clientSocket.send(message.encode())
+        else:
+            print("[recv] " + message)
+            print("[send] Cannot understand this message")
+            message = 'Cannot understand this message'
+            self.clientSocket.send(message.encode())
+        """
     
     """
         You can create more customized APIs here, e.g., logic for processing user authentication
@@ -140,6 +145,8 @@ class ClientThread(Thread):
             message = 'user credentials request'
             self.clientSocket.send(message.encode())
     """
+    
+    # Login user at the start
     def processLogin(self):
         # use recv() to receive message from the client, the first one is username
         data = self.clientSocket.recv(1024)
@@ -186,7 +193,7 @@ class ClientThread(Thread):
                 return
             # Password verified, welcome user
             else:
-                message = "welcome user"
+                message = "welcome user" + str(self.owningServer.activePeriod)
                 self.clientSocket.send(message.encode())
 
         # User currently isn't registered begin signon
@@ -201,7 +208,7 @@ class ClientThread(Thread):
             # Password is valid, register user
             password = message
             registerUser(user, password)
-            message = "welcome user"
+            message = "welcome user" + str(self.owningServer.activePeriod)
             self.clientSocket.send(message.encode())
 
 # Initialise server class

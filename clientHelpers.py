@@ -1,9 +1,13 @@
 from socket import *
 import sys
+import re
 
 # Sends client terminal input to server, and returns server response
 def sendAndReceive(message, clientSocket):
+    # send message
     clientSocket.sendall(message.encode())
+    # receive response from the server
+    # 1024 is a suggested packet size, you can specify it as 2048 or others
     data = clientSocket.recv(1024)
     return data.decode()
 
@@ -36,8 +40,8 @@ def loginUser(clientSocket):
     # restart the login process
     elif (receivedMessage == "multiple arguments"):
         print("Usernames can't have spaces, try again")
-        loginUser(clientSocket)
-        return
+        return loginUser(clientSocket)
+        
         
     # Throwaway line acting as a 'continue', may refactor later
     elif (receivedMessage == "locked"):
@@ -49,9 +53,12 @@ def loginUser(clientSocket):
         print("Serverside error: Unknown Login Response")
         sys.exit(1)
 
-    # Authentication/Sign up stage complete! Welcome user and continue to board
-    if (receivedMessage == "welcome user"):
+    # Authentication/Sign up stage complete! Welcome user and access board + retrieve timeoutPeriod
+    if ("welcome user" in receivedMessage):
         print("Welcome to the greatest messaging application ever!")
+        timeout = re.search("[0-9]*$", receivedMessage)
+        timeout = int(timeout.group())
+        return timeout
     # Or locked, in which case hold in the shadow realm
     # User can check if they are unlocked by sending to server
     elif (receivedMessage == "locked"):
@@ -60,8 +67,7 @@ def loginUser(clientSocket):
             receivedMessage = sendAndReceive(message, clientSocket)
         # ReceivedMessage is no longer "blocked", can restart the login process
         print("No longer blocked, please restart the login process")
-        loginUser(clientSocket)
-        return
+        return loginUser(clientSocket)
     else:
         print("Serverside error: Unknown Login Response")
         sys.exit(1)

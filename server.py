@@ -43,11 +43,11 @@ class Server:
 
         # Dictionary of locked users
         self.lockedUsers = {}
-        self.lockPeriod = 5
+        self.lockPeriod = 120
 
         # Dictionary of user log, contains the time of last interaction by users
         self.userLog = {}
-        self.activePeriod = 120
+        self.activePeriod = 5
         
 
     def run(self):

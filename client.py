@@ -38,32 +38,48 @@ message = "awaiting command"
 class TimeoutThread(Thread):
     def __init__(self, clientSocket, timeoutPeriod):
         Thread.__init__(self)
-        self.timeoutPeriod = timeoutPeriod + time.time()
+        self.timeoutPeriod = timeoutPeriod
+        self.timeoutDeadline = timeoutPeriod + time.time()
         self.clientSocket = clientSocket
         self.isActive = True
-        
+
+    def resetTimer(self):
+        self.timeoutDeadline = self.timeoutPeriod + time.time()
+
+    # Check if timed out at runtime
+    def isActiveNow(self):
+        t = time.time()
+        if t >= self.timeoutDeadline:
+            return False
+        else:
+            return True
+
     def run(self):
         sleep_seconds = 1
         while True:
             t = time.time()
 
-            if t >= self.timeoutPeriod:
-                sendAndReceive("logout", self.clientSocket)
-                print("You have been logged out due to inactivity")
+            if t >= self.timeoutDeadline:
+                sendAndReceive("logout", self.clientSocket, True)
+                print("You have been logged out due to inactivity, press enter to continue")
                 self.isInactive = False
                 break
 
             time.sleep(sleep_seconds)
 
+    
+
 timeoutThread = TimeoutThread(clientSocket, timeout)
 timeoutThread.start()
 while (timeoutThread.isActive):
+    # Reset the timeout timer per loop
+    timeoutThread.resetTimer()
     # parse the message received from server and take corresponding actions
     
     # The user is able to start a new command
     if message == "awaiting command":
         message = input("===== Please type any message you want to send to server: =====\n")
-        message = sendAndReceive(message, clientSocket)
+        message = sendAndReceive(message, clientSocket, timeoutThread.isActiveNow())
     elif message == "":
         print("[recv] Message from server is empty!")
         break
@@ -79,6 +95,7 @@ while (timeoutThread.isActive):
         print("[recv] Message makes no sense")
         ans = input('\nDo you want to continue(y/n) :')
         if ans == 'y':
+            message = "awaiting command"
             continue
         else:
             break

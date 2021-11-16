@@ -15,14 +15,51 @@ import re
 # acquire server host and port from command line parameter
 if len(sys.argv) != 2:
     print("\n===== Error usage, python3 TCPServer3.py SERVER_PORT ======\n");
-    exit(0);
+    exit(0)
+"""
 serverHost = "127.0.0.1"
 serverPort = int(sys.argv[1])
 serverAddress = (serverHost, serverPort)
 
+# Dictionary of locked users
+lockedUsers = {}
+lockPeriod = 5
+
 # define socket for the server side and bind address
 serverSocket = socket(AF_INET, SOCK_STREAM)
 serverSocket.bind(serverAddress)
+"""
+"""
+    Define server class
+"""
+class Server:
+    def __init__(self, port):
+        serverHost = "127.0.0.1"
+        serverPort = port
+        serverAddress = (serverHost, serverPort)
+        # define socket for the server side and bind address
+        self.serverSocket = socket(AF_INET, SOCK_STREAM)
+        self.serverSocket.bind(serverAddress)
+
+        # Dictionary of locked users
+        self.lockedUsers = {}
+        self.lockPeriod = 5
+
+        # Dictionary of user log, contains the time of last interaction by users
+        self.userLog = {}
+        self.activePeriod = 120
+        
+
+    def run(self):
+        print("\n===== Server is running =====")
+        print("===== Waiting for connection request from clients...=====")
+
+
+        while True:
+            self.serverSocket.listen()
+            clientSockt, clientAddress = self.serverSocket.accept()
+            clientThread = ClientThread(clientAddress, clientSockt, self)
+            clientThread.start()
 
 """
     Define multi-thread class for client
@@ -33,14 +70,13 @@ serverSocket.bind(serverAddress)
     for client-2. Each client will be runing in a separate therad, which is the multi-threading
 """
 class ClientThread(Thread):
-    def __init__(self, clientAddress, clientSocket):
+    def __init__(self, clientAddress, clientSocket, server):
         Thread.__init__(self)
         self.clientAddress = clientAddress
         self.clientSocket = clientSocket
         self.clientAlive = False
-        self.lockedUsers = {}
-        self.lockPeriod = 5
-        
+        self.owningServer = server
+
         print("===== New connection created for: ", clientAddress)
         self.clientAlive = True
         
@@ -63,7 +99,7 @@ class ClientThread(Thread):
             # Get the first argument of message, this will be the client command
             command = re.search("^[a-z]*", message)
             command = command.group()
-            print("Client", clientAddress, "sends command", command)
+            print("Client", self.clientAddress, "sends command", command)
 
             if (command == "login"):
                 print("[recv] Login request")
@@ -125,21 +161,26 @@ class ClientThread(Thread):
             message = "user exists"
             password = getUserPassword(user)
             count = 0
-            message = sendAndReceive(message, self.clientSocket)
+            # Check if account is currently locked by another client, treat if blocked
+            lockStatus = isLocked(user, self.owningServer.lockedUsers, self.owningServer.lockPeriod)
+            if lockStatus == False:
+                message = sendAndReceive(message, self.clientSocket)
+            else:
+                sendAndReceive("locked", self.clientSocket)
             # Given password is wrong, 2 more tries
-            while (message != password and count < 2):
+            while (message != password and count < 2 and lockStatus == False):
                 message = "wrong pw"
                 message = sendAndReceive(message, self.clientSocket)
                 count += 1
             # 3 incorrect attempts have been made, block user
-            if (count == 2 and message != password):
-                self.lockedUsers = lockUser(user, self.lockedUsers)
-                while (isLocked(user, self.lockedUsers, self.lockPeriod)):                    
+            if ((count == 2 and message != password) or lockStatus == True):
+                lockUser(user, self.owningServer.lockedUsers)
+                while (isLocked(user, self.owningServer.lockedUsers, self.owningServer.lockPeriod)):                    
                     message = "locked"
                     message = sendAndReceive(message, self.clientSocket)
                 # No longer blocked, allow client to restart login
                 message = 'unlocked'
-                del self.lockedUsers[user]
+                del self.owningServer.lockedUsers[user]
                 self.clientSocket.send(message.encode())
                 self.processLogin()
                 return
@@ -163,13 +204,7 @@ class ClientThread(Thread):
             message = "welcome user"
             self.clientSocket.send(message.encode())
 
-
-print("\n===== Server is running =====")
-print("===== Waiting for connection request from clients...=====")
-
-
-while True:
-    serverSocket.listen()
-    clientSockt, clientAddress = serverSocket.accept()
-    clientThread = ClientThread(clientAddress, clientSockt)
-    clientThread.start()
+# Initialise server class
+server = Server(int(sys.argv[1]))
+# Run the server
+server.run()

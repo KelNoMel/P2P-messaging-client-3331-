@@ -28,7 +28,8 @@ def loginUser(clientSocket):
         message = input("This is a new user. Enter a password:")
         receivedMessage = sendAndReceive(message, clientSocket)
         while (receivedMessage == "no spaces"):
-            message = input("Password can't have spaces")
+            print("Password can't have spaces")
+            message = input("Password:")
             receivedMessage = sendAndReceive(message, clientSocket)
 
     # ASSUMPTION: If the user had spaces in their name (multiple arguments)
@@ -38,6 +39,10 @@ def loginUser(clientSocket):
         loginUser(clientSocket)
         return
         
+    # Throwaway line acting as a 'continue', may refactor later
+    elif (receivedMessage == "locked"):
+        throwAway = True
+
     # At this stage the server has client down for signup or pw request
     # This would be an unknown state of neither, so shouldn't go to this line
     else:

@@ -8,6 +8,7 @@
 """
 from socket import *
 from threading import Thread
+from serverHelpers import *
 import sys, select
 import re
 
@@ -37,11 +38,14 @@ class ClientThread(Thread):
         self.clientAddress = clientAddress
         self.clientSocket = clientSocket
         self.clientAlive = False
+        self.lockedUsers = {}
+        self.lockPeriod = 5
         
         print("===== New connection created for: ", clientAddress)
         self.clientAlive = True
         
     def run(self):
+        self.processLogin()
         message = ''
         
         while self.clientAlive:
@@ -57,8 +61,9 @@ class ClientThread(Thread):
                 break
 
             # Get the first argument of message, this will be the client command
-            command = re.search("[a-zA-Z1-9]*", message)
-            print("Client", clientAddress, "sends command", command.group())
+            command = re.search("^[a-z]*", message)
+            command = command.group()
+            print("Client", clientAddress, "sends command", command)
 
             if (command == "login"):
                 print("[recv] Login request")
@@ -100,9 +105,63 @@ class ClientThread(Thread):
             self.clientSocket.send(message.encode())
     """
     def processLogin(self):
-        message = 'user credentials request'
-        print('[send] ' + message)
-        self.clientSocket.send(message.encode())
+        # use recv() to receive message from the client, the first one is username
+        data = self.clientSocket.recv(1024)
+        message = data.decode()
+
+        # Check if username has spaces, restart if so
+        if hasSpaces(message):
+            message = 'multiple arguments'
+            print('[send] ' + message)
+            self.clientSocket.send(message.encode())
+            self.processLogin()
+            return
+        
+        # Username is 'valid', check if registered in credentials
+
+        # User is registered, begin logon process
+        if (userInCredentials(message)):
+            user = message
+            message = "user exists"
+            password = getUserPassword(user)
+            count = 0
+            message = sendAndReceive(message, self.clientSocket)
+            # Given password is wrong, 2 more tries
+            while (message != password and count < 2):
+                message = "wrong pw"
+                message = sendAndReceive(message, self.clientSocket)
+                count += 1
+            # 3 incorrect attempts have been made, block user
+            if (count == 2 and message != password):
+                self.lockedUsers = lockUser(user, self.lockedUsers)
+                while (isLocked(user, self.lockedUsers, self.lockPeriod)):                    
+                    message = "locked"
+                    message = sendAndReceive(message, self.clientSocket)
+                # No longer blocked, allow client to restart login
+                message = 'unlocked'
+                del self.lockedUsers[user]
+                self.clientSocket.send(message.encode())
+                self.processLogin()
+                return
+            # Password verified, welcome user
+            else:
+                message = "welcome user"
+                self.clientSocket.send(message.encode())
+
+        # User currently isn't registered begin signon
+        else:
+            user = message
+            message = "new user detected"
+            message = sendAndReceive(message, self.clientSocket)
+            # In case password has spaces and is invalid
+            while (hasSpaces(message)):
+                message = "no spaces"
+                message = sendAndReceive(message, self.clientSocket)
+            # Password is valid, register user
+            password = message
+            registerUser(user, password)
+            message = "welcome user"
+            self.clientSocket.send(message.encode())
 
 
 print("\n===== Server is running =====")

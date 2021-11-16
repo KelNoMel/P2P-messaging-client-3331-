@@ -8,12 +8,13 @@
 
 """
 from socket import *
+from clientHelpers import *
 import sys
 
 #Server would be running on the same host as Client
 if len(sys.argv) != 2:
     print("\n===== Error usage, python3 TCPClient3.py SERVER_IP SERVER_PORT ======\n");
-    exit(0);
+    exit(0)
 serverHost = "127.0.0.1"
 serverPort = int(sys.argv[1])
 serverAddress = (serverHost, serverPort)
@@ -24,8 +25,12 @@ clientSocket = socket(AF_INET, SOCK_STREAM)
 # build connection with the server and send message to it
 clientSocket.connect(serverAddress)
 
+# Connection with server established, present authentication
+# Function found in helpers
+loginUser(clientSocket)
+
 while True:
-    message = input("===== Please type any messsage you want to send to server: =====\n")
+    message = input("===== Please type any message you want to send to server: =====\n")
     clientSocket.sendall(message.encode())
 
     # receive response from the server
@@ -51,3 +56,5 @@ while True:
 
 # close the socket
 clientSocket.close()
+
+

@@ -10,10 +10,20 @@ def sendAndReceive(message, clientSocket, isActive):
     
     # send message
     clientSocket.sendall(message.encode())
+
     # receive response from the server
     # 1024 is a suggested packet size, you can specify it as 2048 or others
     data = clientSocket.recv(1024)
     return data.decode()
+
+# Just send terminal input to server
+def send(message, clientSocket, isActive):
+    # Inactive clients have already been disconnected and cannot send or receive
+    if (isActive == False):
+        return "inactive logout"
+    
+    # send message
+    clientSocket.sendall(message.encode())
 
 # Once a client is connected, authenticate the user at the very start
 def loginUser(clientSocket):

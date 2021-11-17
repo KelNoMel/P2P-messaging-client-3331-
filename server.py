@@ -16,19 +16,7 @@ import re
 if len(sys.argv) != 2:
     print("\n===== Error usage, python3 TCPServer3.py SERVER_PORT ======\n");
     exit(0)
-"""
-serverHost = "127.0.0.1"
-serverPort = int(sys.argv[1])
-serverAddress = (serverHost, serverPort)
 
-# Dictionary of locked users
-lockedUsers = {}
-lockPeriod = 5
-
-# define socket for the server side and bind address
-serverSocket = socket(AF_INET, SOCK_STREAM)
-serverSocket.bind(serverAddress)
-"""
 """
     Define server class
 """
@@ -46,9 +34,29 @@ class Server:
         self.lockPeriod = 120
 
         # Dictionary of user log, contains the time of last interaction by users
-        self.userLog = {}
-        self.activePeriod = 5
+        self.userActivityLog = {}
+        self.activePeriod = 120
+
+        # Dictionary of logged in users and their sockets
+        self.userSockets = {}
+    
+    # Given a username for user parameter, send msg. If can't for whatever reason, send
+    # a message back to sender
+    def broadcastIndividual(self, senderSckt, user, msg):
+        if user not in self.userSockets:
+            message = "MSG Requested user:" + user + " not found"
+            senderSckt.send(message.encode)
         
+        userSckt = self.userSockets[user]
+        userSckt.send(msg.encode())
+
+    # Given a username for user parameter, send msg. If can't for whatever reason, send
+    # a message back to sender
+    def broadcastAll(self, senderSckt, msg):
+        for userSckt in self.userSockets.values():
+            if (userSckt != senderSckt):
+                userSckt.send(msg.encode())
+
 
     def run(self):
         print("\n===== Server is running =====")
@@ -76,14 +84,22 @@ class ClientThread(Thread):
         self.clientSocket = clientSocket
         self.clientAlive = False
         self.owningServer = server
+        self.name = "Default"
 
         print("===== New connection created for: ", clientAddress)
         self.clientAlive = True
         
+        
     def run(self):
         # Login the client
         self.processLogin()
+        # Successful login, update socket log for that user
+        self.owningServer.userSockets[self.name] = self.clientSocket
         message = ''
+        
+        # Alert the server that user has logged in
+        self.owningServer.broadcastAll(self.clientSocket, ("MSG " + self.name + " logged in"))
+        
         
         while self.clientAlive:
             # use recv() to receive message from the client
@@ -92,7 +108,7 @@ class ClientThread(Thread):
             
             if message == '':
                 self.clientAlive = False
-                message = 'empty message'
+                message = 'CMD empty message'
                 print("[send] " + message)
                 self.clientSocket.send(message.encode())
                 break
@@ -103,40 +119,18 @@ class ClientThread(Thread):
             print("Client", self.clientAddress, "sends command", command)
 
             if (command == "logout"):
-                message = 'unknown message'
+                message = 'CMD logout confirmed'
                 print("[recv] logout request")
-                self.clientSocket.sendall(message.encode())
+                self.clientSocket.send(message.encode())
+                self.owningServer.broadcastAll(self.clientSocket, ("MSG " + self.name + " logged out"))
                 break
             else:
                 print("[recv] Unknown Message '", message, "'")
-                message = 'unknown message'
+                message = 'CMD unknown message'
                 print('[send] ' + message)
                 self.clientSocket.send(message.encode())
 
         print("thread closed")
-
-        """
-        # if the message from client is empty, the client would be off-line then set the client as offline (alive=Flase)
-        if message == '':
-            self.clientAlive = False
-            print("===== the user disconnected - ", clientAddress)
-            break
-        
-        # handle message from the client
-        if message == 'login':
-            print("[recv] New login request")
-            self.process_login()
-        elif message == 'download':
-            print("[recv] Download request")
-            message = 'download filename'
-            print("[send] " + message)
-            self.clientSocket.send(message.encode())
-        else:
-            print("[recv] " + message)
-            print("[send] Cannot understand this message")
-            message = 'Cannot understand this message'
-            self.clientSocket.send(message.encode())
-        """
     
     """
         You can create more customized APIs here, e.g., logic for processing user authentication
@@ -165,6 +159,7 @@ class ClientThread(Thread):
         # User is registered, begin logon process
         if (userInCredentials(message)):
             user = message
+            self.name = user
             message = "user exists"
             password = getUserPassword(user)
             count = 0
@@ -199,6 +194,7 @@ class ClientThread(Thread):
         # User currently isn't registered begin signon
         else:
             user = message
+            self.name = user
             message = "new user detected"
             message = sendAndReceive(message, self.clientSocket)
             # In case password has spaces and is invalid

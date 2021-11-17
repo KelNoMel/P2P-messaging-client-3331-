@@ -16,6 +16,7 @@ class CommandThread(Thread):
         self.command = message
 
     def handleCmd(self, message):
+        #print(message)
         # The user is able to start a new command
         if message == "awaiting command":
             message = input("===== Please type any message you want to send to server: =====\n")
@@ -45,14 +46,15 @@ class CommandThread(Thread):
     def run(self):
         while self.isActive:
             # Constantly check if a new command is issued
-            oldCommand = self.command
             time.sleep(0.5)
             # If there is a new command, reset the timeout timer and execute
             # command parallel to the client
-            if self.command != oldCommand:
+            if self.command != "default":
+                commandSave = self.command
+                self.command = "default"
                 self.timeoutThread.resetTimer()
-                self.handleCmd(self.command)
-        #print("cmd break")
+                self.handleCmd(commandSave)
+        print("cmd break")
         
     
 

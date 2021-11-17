@@ -9,6 +9,7 @@
 from socket import *
 from threading import Thread
 from serverHelpers import *
+import time
 import sys, select
 import re
 
@@ -29,14 +30,15 @@ class Server:
         self.serverSocket = socket(AF_INET, SOCK_STREAM)
         self.serverSocket.bind(serverAddress)
 
-        # Dictionary of locked users
-        self.lockedUsers = {}
+        # Timeout period period of the server
+        self.activePeriod = timeout
+        # Lock period of blocked users who inputted the wrong password
         self.lockPeriod = blockDuration
 
-        # Dictionary of user log, contains the time of last interaction by users
-        self.userActivityLog = {}
-        self.activePeriod = timeout
-
+        # Dictionary of locked users
+        self.lockedUsers = {}
+        # Dictionary of user logout times, contains the last logout of user
+        self.userLastOnline = {}
         # Dictionary of logged in users and their sockets
         self.userSockets = {}
     
@@ -44,19 +46,43 @@ class Server:
     # a message back to sender
     def broadcastIndividual(self, senderSckt, user, msg):
         if user not in self.userSockets:
-            message = "MSG Requested user:" + user + " not found"
-            senderSckt.send(message.encode)
-        
-        userSckt = self.userSockets[user]
-        userSckt.send(msg.encode())
+            send(("MSG Requested user:" + user + " not found"), senderSckt)
+        # Messages can't be sent to self
+        elif self.userSockets[user] == senderSckt:
+            send(("MSG You can't send a message to yourself"), senderSckt)
+        # Send a message as normal
+        else:
+            send(msg, self.userSockets[user])
 
     # Given a username for user parameter, send msg. If can't for whatever reason, send
     # a message back to sender
     def broadcastAll(self, senderSckt, msg):
-        for userSckt in self.userSockets.values():
+        userList = self.userSockets.values()
+        for userSckt in userList:
             if (userSckt != senderSckt):
-                userSckt.send(msg.encode())
+                send(msg, userSckt)
 
+    # Return active users, (by returning the keys of all active sockets)
+    def retrieveOnlineUsers(self, requester):
+        userList = list(self.userSockets.keys())
+        userList = self.removeInaccessible(requester, userList)
+        return userList
+
+    # Return users that were active within a specific time
+    def retrieveOnlineUsersPeriod(self, requester, seconds):
+        userList = list(self.userSockets.keys())
+        for user in self.userLastOnline.keys():
+            if ((time.time() - self.userLastOnline[user]) < float(seconds)) and user not in userList:
+                userList.append(user)
+        userList = self.removeInaccessible(requester, userList)
+        return userList
+
+    # Given a requester and a list of users, take out users that requester cant send to/access
+    def removeInaccessible(self, requester, userList):
+        # Take out requester
+        if requester in userList:
+            userList.remove(requester)
+        return userList
 
     def run(self):
         print("\n===== Server is running =====")
@@ -105,12 +131,11 @@ class ClientThread(Thread):
             # use recv() to receive message from the client
             data = self.clientSocket.recv(1024)
             message = data.decode()
+            arglist = message.split()
             
             if message == '':
                 self.clientAlive = False
-                message = 'CMD empty message'
-                print("[send] " + message)
-                self.clientSocket.send(message.encode())
+                send(("CMD empty message"), self.clientSocket)
                 break
 
             # Get the first argument of message, this will be the client command
@@ -118,18 +143,42 @@ class ClientThread(Thread):
             command = command.group()
             print("Client", self.clientAddress, "sends command", command)
 
-            if (command == "logout"):
-                message = 'CMD logout confirmed'
-                print("[recv] logout request")
-                self.clientSocket.send(message.encode())
+            if command == "logout":
+                send(("CMD logout confirmed"), self.clientSocket)
                 self.owningServer.broadcastAll(self.clientSocket, ("MSG " + self.name + " logged out"))
+                self.owningServer.userLastOnline[self.name] = time.time()
                 del self.owningServer.userSockets[self.name]
                 break
+            
+            elif command == "whoelse":
+                userList = self.owningServer.retrieveOnlineUsers(self.name)
+                # Send every user retrieved from server method
+                for user in userList:
+                    send(("MSG " + user), self.clientSocket)
+                time.sleep(0.5)
+                send(("CMD awaiting command"), self.clientSocket)
+            
+            elif command == "whoelsesince":
+                userList = self.owningServer.retrieveOnlineUsersPeriod(self.name, arglist[1])
+                # Send every user retrieved from server method
+                for user in userList:
+                    send(("MSG " + user), self.clientSocket)
+                time.sleep(0.5)
+                send(("CMD awaiting command"), self.clientSocket)
+            
+            elif command == "message":
+                user = arglist[1]
+                sendMessage = "MSG " + self.name + ": " + message[(8 + len(user)):]
+                self.owningServer.broadcastIndividual(self.clientSocket, user, sendMessage)
+                send(("CMD awaiting command"), self.clientSocket)
+            elif command == "broadcast":
+                user = arglist[1]
+                sendMessage = "MSG " + self.name + ": " + message[(10):]
+                self.owningServer.broadcastAll(self.clientSocket, sendMessage)
+                send(("CMD awaiting command"), self.clientSocket)
             else:
                 print("[recv] Unknown Message '", message, "'")
-                message = 'CMD unknown message'
-                print('[send] ' + message)
-                self.clientSocket.send(message.encode())
+                send(("CMD unknown message"), self.clientSocket)
 
         print("thread closed")
     

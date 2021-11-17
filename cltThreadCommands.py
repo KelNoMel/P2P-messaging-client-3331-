@@ -19,7 +19,10 @@ class CommandThread(Thread):
         # The user is able to start a new command
         if message == "awaiting command":
             message = input("===== Please type any message you want to send to server: =====\n")
-            message = send(message, self.clientSocket, self.timeoutThread.isActiveNow())
+            if (not self.timeoutThread.isActiveNow()):
+                self.isActive = False
+            else:
+                message = send(message, self.clientSocket, self.timeoutThread.isActiveNow())
 
         elif message == "":
             print("[recv] Message from server is empty!")
@@ -49,7 +52,8 @@ class CommandThread(Thread):
             if self.command != oldCommand:
                 self.timeoutThread.resetTimer()
                 self.handleCmd(self.command)
-            
+        #print("cmd break")
+        
     
 
 

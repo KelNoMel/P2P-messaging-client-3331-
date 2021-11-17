@@ -27,6 +27,7 @@ class MsgThread(Thread):
             # If the message is a logout confirmation, don't loop again and await a response
             if message == "logout confirmed":
                 break
+        #print("msg break")
             
 
 # Determines if the data has protocol designated for msgThread

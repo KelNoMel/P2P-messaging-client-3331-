@@ -13,15 +13,15 @@ import sys, select
 import re
 
 # acquire server host and port from command line parameter
-if len(sys.argv) != 2:
-    print("\n===== Error usage, python3 TCPServer3.py SERVER_PORT ======\n");
+if len(sys.argv) != 4:
+    print("\n===== Error usage, python3 TCPServer3.py SERVER_PORT BLOCK_DURATION TIMEOUT ======\n");
     exit(0)
 
 """
     Define server class
 """
 class Server:
-    def __init__(self, port):
+    def __init__(self, port, blockDuration, timeout):
         serverHost = "127.0.0.1"
         serverPort = port
         serverAddress = (serverHost, serverPort)
@@ -31,11 +31,11 @@ class Server:
 
         # Dictionary of locked users
         self.lockedUsers = {}
-        self.lockPeriod = 120
+        self.lockPeriod = blockDuration
 
         # Dictionary of user log, contains the time of last interaction by users
         self.userActivityLog = {}
-        self.activePeriod = 120
+        self.activePeriod = timeout
 
         # Dictionary of logged in users and their sockets
         self.userSockets = {}
@@ -123,6 +123,7 @@ class ClientThread(Thread):
                 print("[recv] logout request")
                 self.clientSocket.send(message.encode())
                 self.owningServer.broadcastAll(self.clientSocket, ("MSG " + self.name + " logged out"))
+                del self.owningServer.userSockets[self.name]
                 break
             else:
                 print("[recv] Unknown Message '", message, "'")
@@ -208,6 +209,6 @@ class ClientThread(Thread):
             self.clientSocket.send(message.encode())
 
 # Initialise server class
-server = Server(int(sys.argv[1]))
+server = Server(int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]))
 # Run the server
 server.run()

@@ -48,6 +48,8 @@ msgThread = MsgThread(clientSocket, cmdThread)
 msgThread.start()
 
 while (True):
+    #if timeoutThread.isActive: print("timeout")
+    #if cmdThread.isActive: print("command")
     if (not timeoutThread.isActive or not cmdThread.isActive):
         timeoutThread.isActive = False
         cmdThread.isActive = False

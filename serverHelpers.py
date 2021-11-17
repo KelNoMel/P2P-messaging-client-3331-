@@ -10,6 +10,10 @@ def sendAndReceive(message, clientSocket):
     data = clientSocket.recv(1024)
     return data.decode()
 
+def send(message, clientSocket):
+    print('[send] ' + message)
+    clientSocket.send(message.encode())
+
 ###### LOGIN HELPERS ######
 
 # Returns a boolean over whether the username is in credentials.txt

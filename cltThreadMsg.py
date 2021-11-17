@@ -15,19 +15,21 @@ class MsgThread(Thread):
         while True:
             data = self.clientSocket.recv(1024)
             message = data.decode()
-            print(message)
+            #print(message)
             # Protocol tells us whether to print the received data, or ignore it
             if isMessage(message):
                 message = message[4:]
+                #print("msg runs ")
                 print(message)
             elif isCommandResponse(message):
+                #print("cmd runs ")
                 message = message[4:]
                 self.cmdHandler.newCmd(message)
             
             # If the message is a logout confirmation, don't loop again and await a response
             if message == "logout confirmed":
                 break
-        #print("msg break")
+        print("msg break")
             
 
 # Determines if the data has protocol designated for msgThread

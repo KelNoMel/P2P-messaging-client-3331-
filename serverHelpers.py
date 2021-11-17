@@ -2,6 +2,7 @@ from socket import *
 import sys
 import re
 import datetime
+from pathlib import Path
 
 # Sends message to client and returns the clients response
 def sendAndReceive(message, clientSocket):
@@ -95,4 +96,50 @@ def isActive(user, dict, activePeriod):
     if timePassed.total_seconds() > activePeriod:
         return False
     else:
+        return True
+
+# Sets up the dictionary of lists required to store user information
+# Used for offline messaging and block functionality
+def dictListSetup():
+    # Check if credentials exist and create file if it doesn't
+    path = Path("credentials.txt")
+    if not path.is_file():
+        f = open("credentials.txt", "x")
+        return {}
+
+    # Otherwise, create a dictionary of lists for every known user in
+    # credentials.txt
+    newDict = {}
+    f = open("credentials.txt", "r")
+    lines = f.readlines()
+    for line in lines:
+        # Username is seperated by space
+        userName = re.search("^.* ", line)
+        userName = userName.group()
+        # Remove tail space
+        userName = userName[:-1]
+        # Add entry in dict for user
+        newDict[userName] = []
+    return newDict
+
+# Can be used to add new user to dictList or clear out entries
+def dictListRefresh(user, dict):
+    dict[user] = []
+
+# Add an entry to dictList for user
+def dictListAddEntry(user, dict, entry):
+    if user not in dict:
+        return False
+    else:
+        dict[user].append(entry)
+        return True
+
+# Remove an entry from user list
+def dictListRemoveEntry(user, dict, entry):
+    if user not in dict:
+        return False
+    elif entry not in dict[user]:
+        return False
+    else:
+        dict[user].remove(entry)
         return True

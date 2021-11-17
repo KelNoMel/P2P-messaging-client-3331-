@@ -41,26 +41,49 @@ class Server:
         self.userLastOnline = {}
         # Dictionary of logged in users and their sockets
         self.userSockets = {}
+
+        # Dictionary of users containing a list of messages sent whilst user was offline
+        self.mailbox = dictListSetup()
     
+        # Dictionary of users containing a list of blocked users
+        self.blocks = dictListSetup()
+
+        # List of user pair sets representing direct connections
+        self.dms = []
+
     # Given a username for user parameter, send msg. If can't for whatever reason, send
     # a message back to sender
-    def broadcastIndividual(self, senderSckt, user, msg):
-        if user not in self.userSockets:
-            send(("MSG Requested user:" + user + " not found"), senderSckt)
+    def broadcastIndividual(self, sender, user, msg):
+        senderSckt = self.userSockets[sender]
+        # If user has never been registered with the server, don't continue and inform sender
+        if user not in self.mailbox:
+            send(("MSG Requested user \"" + user + "\" is not a user of the server yet"), senderSckt)
+        # If user is registered and offline, make it an offline message and send to mailbox, inform sender
+        elif (user in self.mailbox) and (user not in self.userSockets):
+            dictListAddEntry(user, self.mailbox, msg)
+            send(("MSG Requested user \"" + user + "\" is currently offline, sent as offline message"), senderSckt)
         # Messages can't be sent to self
         elif self.userSockets[user] == senderSckt:
             send(("MSG You can't send a message to yourself"), senderSckt)
+        # Messages can't be sent to users who have blocked you
+        elif sender in self.blocks[user]:
+            send("MSG Your message could not be delivered as the recipient has blocked you", senderSckt)
+            time.sleep(0.2)
         # Send a message as normal
         else:
             send(msg, self.userSockets[user])
 
     # Given a username for user parameter, send msg. If can't for whatever reason, send
     # a message back to sender
-    def broadcastAll(self, senderSckt, msg):
-        userList = self.userSockets.values()
-        for userSckt in userList:
-            if (userSckt != senderSckt):
-                send(msg, userSckt)
+    def broadcastAll(self, sender, msg, showBlock):
+        userList = list(self.userSockets.keys())
+        preSize = len(userList)
+        self.removeInaccessible(sender, userList)
+        if len(userList) < (preSize - 1) and showBlock:
+            send("MSG Your message could not be delivered to some recipients", self.userSockets[sender])
+            time.sleep(0.2)
+        for user in userList:
+            send(msg, self.userSockets[user])
 
     # Return active users, (by returning the keys of all active sockets)
     def retrieveOnlineUsers(self, requester):
@@ -82,7 +105,61 @@ class Server:
         # Take out requester
         if requester in userList:
             userList.remove(requester)
+        # Take out users who have blocked requester
+        for user in self.blocks.keys():
+            if requester in self.blocks[user]:
+                userList.remove(user)
         return userList
+
+    # Given a sender and a user, attempt to setup private messaging
+    def setupDmInvite(self, sender, user):
+        noIssuesSoFar = True
+        # Check if both users are available for a private session
+        for pair in self.dms:
+            if sender in pair:
+                send("MSG Close existing private message session before starting a new one", self.userSockets[sender])
+                noIssuesSoFar = False
+            elif user in pair:
+                send("MSG Requested user is already in private message session. Please try again later", self.userSockets[sender])
+                noIssuesSoFar = False
+
+        # Both parties are available for private session, continue
+        if noIssuesSoFar:
+            # Create an entry in dms, with both parties and the status of the connection as "invite"
+            self.dms.append(list((sender, user, "invite")))
+            send("MSG " + user + " would like to private message, enter y or n: ", self.userSockets[user])
+
+    # If a user accepts a private session invitation, exchange names and sockets between users
+    def setupDmFinalise(self, sender, user):
+
+        if (list((sender, user, "invite")) not in self.dms):
+            print("ERROR: dms pair not found")
+        else:
+            send("DMS info " + user + " " + self.userSockets[user], self.userSockets[sender])
+            send("DMS info " + sender + " " + self.userSockets[sender], self.userSockets[user])
+            # Update status of pairing
+            for pair in self.dms:
+                if sender in pair and user in pair:
+                    pair[2] = "In usage"
+        
+        
+
+
+    # Removes dm in dm dictionary, and sends appropriate messages to parties, TODO add more context messages
+    def removeDm(self, sender):
+        for pair in self.dms:
+            if (sender in pair):
+                send("MSG successfully ended connection", self.userSockets[sender])
+                partner = ""
+                # Look for partner in dms entry
+                for entry in pair:
+                    if entry in self.userSockets and entry != sender:
+                        partner = entry
+                send("MSG private session ended", self.userSockets[partner])
+                self.dms.remove(pair)
+
+            
+
 
     def run(self):
         print("\n===== Server is running =====")
@@ -124,7 +201,7 @@ class ClientThread(Thread):
         message = ''
         
         # Alert the server that user has logged in
-        self.owningServer.broadcastAll(self.clientSocket, ("MSG " + self.name + " logged in"))
+        self.owningServer.broadcastAll(self.name, ("MSG " + self.name + " logged in"), False)
         
         
         while self.clientAlive:
@@ -145,7 +222,7 @@ class ClientThread(Thread):
 
             if command == "logout":
                 send(("CMD logout confirmed"), self.clientSocket)
-                self.owningServer.broadcastAll(self.clientSocket, ("MSG " + self.name + " logged out"))
+                self.owningServer.broadcastAll(self.name, ("MSG " + self.name + " logged out"), False)
                 self.owningServer.userLastOnline[self.name] = time.time()
                 del self.owningServer.userSockets[self.name]
                 break
@@ -169,13 +246,66 @@ class ClientThread(Thread):
             elif command == "message":
                 user = arglist[1]
                 sendMessage = "MSG " + self.name + ": " + message[(8 + len(user)):]
-                self.owningServer.broadcastIndividual(self.clientSocket, user, sendMessage)
+                self.owningServer.broadcastIndividual(self.name, user, sendMessage)
                 send(("CMD awaiting command"), self.clientSocket)
+            
             elif command == "broadcast":
                 user = arglist[1]
                 sendMessage = "MSG " + self.name + ": " + message[(10):]
-                self.owningServer.broadcastAll(self.clientSocket, sendMessage)
+                self.owningServer.broadcastAll(self.name, sendMessage, True)
                 send(("CMD awaiting command"), self.clientSocket)
+            
+            elif command == "block":
+                user = arglist[1]
+                # Can't block self
+                if user == self.name:
+                    sendMessage = "MSG Error. Cannot block self"
+                # Can't block those who are already blocked
+                elif user in self.owningServer.blocks[self.name]:
+                    sendMessage = "MSG Error. " + user + " was already blocked"
+                # Checks passed, continue to blocking
+                else:
+                    dictListAddEntry(self.name, self.owningServer.blocks, user)
+                    sendMessage = "MSG " + user + " is blocked"
+                    send(("CMD awaiting command"), self.clientSocket)
+                send(sendMessage, self.clientSocket)
+            
+            elif command == "unblock":
+                user = arglist[1]
+                # Can't block self
+                if user == self.name:
+                    sendMessage = "MSG Error. Self cannot have been blocked"
+                # Can't block those who are already blocked
+                elif user in self.owningServer.blocks[self.name]:
+                    sendMessage = "MSG Error. " + user + " was not blocked"
+                # Checks passed, continue to blocking
+                else:
+                    dictListRemoveEntry(self.name, self.owningServer.blocks, user)
+                    sendMessage = "MSG " + user + " is unblocked"
+                    send(("CMD awaiting command"), self.clientSocket)
+                send(sendMessage, self.clientSocket)
+            
+            # Send a request to start a private, let server handle matching
+            elif command == "startprivate":
+                user = arglist[1]
+                self.owningServer.setupDmInvite(self.name, user)
+                time.sleep(0.5)
+                send(("CMD awaiting command"), self.clientSocket)
+            
+            elif command == "y":
+                user = arglist[1]
+                if list((user, self.name, "invite")) in self.dms:
+                    self.owningServer.setupDmFinalise(self.name, user)
+                    time.sleep(0.5)
+                    send(("CMD awaiting command"), self.clientSocket)
+                else:
+                    print("[recv] Unknown Message '", message, "'")
+                    send(("CMD unknown message"), self.clientSocket)
+
+            
+            elif command == "continue":
+                send(("CMD awaiting command"), self.clientSocket)
+            
             else:
                 print("[recv] Unknown Message '", message, "'")
                 send(("CMD unknown message"), self.clientSocket)
@@ -213,8 +343,13 @@ class ClientThread(Thread):
             message = "user exists"
             password = getUserPassword(user)
             count = 0
-            # Check if account is currently locked by another client, treat if blocked
+            # Check if account is currently locked or accessed by another client, treat if blocked
             lockStatus = isLocked(user, self.owningServer.lockedUsers, self.owningServer.lockPeriod)
+            onlineStatus = (user in self.owningServer.userSockets)
+            if (onlineStatus):
+                send("in use", self.clientSocket)
+                self.processLogin()
+                return
             if lockStatus == False:
                 message = sendAndReceive(message, self.clientSocket)
             else:
@@ -240,6 +375,12 @@ class ClientThread(Thread):
             else:
                 message = "welcome user" + str(self.owningServer.activePeriod)
                 self.clientSocket.send(message.encode())
+                # Send all offline messages sent in absence
+                for offlineMsg in self.owningServer.mailbox[user]:
+                    send(offlineMsg, self.clientSocket)
+                    time.sleep(0.5)
+
+                dictListRefresh(user, self.owningServer.mailbox)
 
         # User currently isn't registered begin signon
         else:
@@ -251,9 +392,10 @@ class ClientThread(Thread):
             while (hasSpaces(message)):
                 message = "no spaces"
                 message = sendAndReceive(message, self.clientSocket)
-            # Password is valid, register user
+            # Password is valid, register user and setup offline messaging
             password = message
             registerUser(user, password)
+            dictListRefresh(user, self.owningServer.mailbox)
             message = "welcome user" + str(self.owningServer.activePeriod)
             self.clientSocket.send(message.encode())
 

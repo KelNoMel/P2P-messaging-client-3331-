@@ -55,8 +55,12 @@ def loginUser(clientSocket):
     elif (receivedMessage == "multiple arguments"):
         print("Usernames can't have spaces, try again")
         return loginUser(clientSocket)
-        
-        
+    
+    # Cannot log into an account that's in use, restart login process
+    elif receivedMessage == "in use":
+        print("Account is already logged in with another client, please choose another")
+        return loginUser(clientSocket)
+
     # Throwaway line acting as a 'continue', may refactor later
     elif (receivedMessage == "locked"):
         throwAway = True

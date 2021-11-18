@@ -29,8 +29,9 @@ def send(message, clientSocket, isActive):
 def loginUser(clientSocket):
     # Input a username
     message = input("Username:")
+    user = message
     receivedMessage = sendAndReceive(message, clientSocket, True)
-
+    
     # Username was found in credentials, prompt for password
     if (receivedMessage == "user exists"):
         message = input("Password:")
@@ -76,7 +77,7 @@ def loginUser(clientSocket):
         print("Welcome to the greatest messaging application ever!")
         timeout = re.search("[0-9]*$", receivedMessage)
         timeout = int(timeout.group())
-        return timeout
+        return timeout, user
     # Or locked, in which case hold in the shadow realm
     # User can check if they are unlocked by sending to server
     elif (receivedMessage == "locked"):

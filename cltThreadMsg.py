@@ -1,5 +1,6 @@
 from threading import Thread
 from cltThreadCommands import CommandThread
+from cltDmMsgReceiver import DmMsgRecieverThread
 import re
 
 # Thread to print out broadcasts from server/public messages from other user
@@ -44,7 +45,9 @@ class MsgThread(Thread):
             dmAddress = ("127.0.0.1", sessionPort)
             self.dmClientSocket.connect(dmAddress)
             print("Private message started with \"" + user + "\"")
-            
+            dmMsgThread = DmMsgRecieverThread(self.dmClientSocket)
+            dmMsgThread.start()
+
         elif arglist[1] == "close":
             self.dmClientSocket.close()
 
@@ -68,3 +71,4 @@ def isPrivate(data):
         return True
     else:
         return False
+

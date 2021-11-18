@@ -6,16 +6,20 @@ import time
 
 # Thread to print out broadcasts from server/public messages from other user
 class CommandThread(Thread):
-    def __init__(self, clientSocket, timeout, dmSocket, dmPort, dmServerSocket):
+    def __init__(self, clientSocket, timeout, dmSocket, dmPort, username):
         Thread.__init__(self)
         self.clientSocket = clientSocket
         self.timeoutThread = timeout
         self.isActive = True
         self.command = "default"
-        self.dmSocket = dmSocket
+        # This is the socket we have for dm's
+        self.dmClientSocket = dmSocket
+        # We give other clients this port so they can access the above socket
         self.dmPort = dmPort
-        self.dmServerSocket = dmServerSocket
+        # This is the socket we will receive from another client and use if we are acting server
+        self.dmOtherSocket = dmSocket # Don't use until changed
         self.isDmServer = False
+        self.username = username
         
     def newCmd(self, message):
         self.command = message
@@ -29,27 +33,29 @@ class CommandThread(Thread):
                 self.timeoutThread.resetTimer()
                 message = input("===input any command===\n")
                 arglist = message.split()
-                command = arglist[0]
+                command = re.search("^[a-z]", message)
+                command = command.group()
                 # If user was inactive, throwaway input and shut thread
                 if (not self.timeoutThread.isActiveNow()):
                     self.isActive = False
                     commandNotGiven = False
-                # If responds yes to a private message request, you are designated server in p2p
-                elif command == "y":
-                    self.isDmServer = True
                 # Stop current private chat
                 elif command == "stopprivate":
                     throwaway = True
                 # Send a message to current private chat
                 elif command == "private":
                     msg = arglist[1]
-                    msg = (self.name + "(private): " + msg)
+                    msg = (self.username + "(private): " + msg)
+                    # Choose whether to send through our own dm socket, or other clients dm socket
                     if self.isDmServer:
-                        send(msg, self.dmServerSocket, self.timeoutThread.isActiveNow())
+                        self.dmOtherSocket.send(msg.encode())
                     else:
-                        send(msg, self.dmSocket, self.timeoutThread.isActiveNow())
+                        self.dmClientSocket.send(msg.encode())
                 # Command was not associated with private chat, assume it is for server
                 else:
+                    # If responds yes to a private message request, you are designated server in p2p
+                    if command == "y":
+                        self.isDmServer = True
                     message = send(message, self.clientSocket, self.timeoutThread.isActiveNow())
                     commandNotGiven = False
 

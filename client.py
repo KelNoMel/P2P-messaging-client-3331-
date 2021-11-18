@@ -38,7 +38,7 @@ dmServerSocket = socket(AF_INET, SOCK_STREAM)
 dmServerSocket.bind((serverHost, 0))
 # This socket will connect to listening sockets, needs to get the port
 dmClientSocket = socket(AF_INET, SOCK_STREAM)
-print(dmClientSocket)
+#print(dmClientSocket)
 # Figure out the port of our dmServerSocket
 dmServerPort = re.search("[0-9]*\)>$", str(dmServerSocket))
 dmServerPort = dmServerPort.group()
@@ -48,7 +48,7 @@ dmServerPort = dmServerPort[0:-2]
 
 # Connection with server established, present authentication
 # When communication is initiated, server also gives timeout limit
-timeout = loginUser(clientSocket)
+timeout, username = loginUser(clientSocket)
 
 # Initial state after logging in, user can immediately issue a command
 message = "awaiting command"
@@ -58,7 +58,7 @@ timeoutThread = TimeoutThread(clientSocket, timeout)
 timeoutThread.start()
 
 # Start commandHandler thread
-cmdThread = CommandThread(clientSocket, timeoutThread, dmClientSocket, dmServerPort, dmServerSocket)
+cmdThread = CommandThread(clientSocket, timeoutThread, dmClientSocket, dmServerPort, username)
 cmdThread.start()
 
 # Start message thread
@@ -66,8 +66,10 @@ msgThread = MsgThread(clientSocket, cmdThread, dmClientSocket)
 msgThread.start()
 
 # Start private session listener
-dmThread = DmListenerThread(dmServerSocket, serverHost, MsgThread)
+dmThread = DmListenerThread(dmServerSocket, serverHost, cmdThread)
 dmThread.start()
+
+
 
 while (True):
     
@@ -76,6 +78,7 @@ while (True):
     if (not timeoutThread.isActive or not cmdThread.isActive):
         timeoutThread.isActive = False
         cmdThread.isActive = False
+        dmThread.isActive = False
         # close the socket
         print("Logged Out")
         clientSocket.close()

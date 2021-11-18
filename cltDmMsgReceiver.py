@@ -13,7 +13,6 @@ class DmMsgRecieverThread(Thread):
             if self.dmClientSocket != -1:
                 message = data.decode()
                 arglist = message.split()
-                print(arglist[0])
                 if arglist[0] == "stopPrivateRegular":
                     print(arglist[1] + " ended the private chat")
                     self.dmClientSocket.send("stopResponse".encode())

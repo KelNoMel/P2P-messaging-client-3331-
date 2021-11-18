@@ -9,19 +9,31 @@ class DmClientThread(Thread):
 
     def run(self):
         print("Connected in private session")
-        print("I am the server")
-        print(self.dmSocket)
         userLoggedIn = True
         while userLoggedIn:
             data = self.dmSocket.recv(1024)
-            message = data.decode()
-            print(message)
-            arglist = message.split()
-            header = arglist[0]
-            if header == "MSG":
-                print(message[4:])
+            if self.dmSocket != -1:
+                message = data.decode()
+                arglist = message.split()
+                if arglist[0] == "stopPrivateRegular":
+                        print(arglist[1] + " ended the private chat")
+                        self.dmSocket.send("stopResponse".encode())
+                        break
+                elif arglist[0] == "stopPrivateRegular":
+                        print(arglist[1] + " logged off, private chat will automatically end")
+                        self.dmSocket.send("stopResponse".encode())
+                        break
+                elif arglist[0] == "stopResponse":
+                    break
+                else:
+                    print(message)
+            else: break
+                
         print("dm client thread breaks")
         
                 
     def sendMessage(self, message):
         self.dmSocket.send(message.encode())
+
+    def stop(self):
+        self.userLoggedIn = False

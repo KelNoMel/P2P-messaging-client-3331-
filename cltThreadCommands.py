@@ -25,7 +25,6 @@ class CommandThread(Thread):
         self.command = message
 
     def handleCmd(self, message):
-        #print(message)
         # The user is able to start a new command
         if message == "awaiting command":
             commandNotGiven = True
@@ -33,7 +32,7 @@ class CommandThread(Thread):
                 self.timeoutThread.resetTimer()
                 message = input("===input any command===\n")
                 arglist = message.split()
-                command = re.search("^[a-z]", message)
+                command = re.search("^[a-z]*", message)
                 command = command.group()
                 # If user was inactive, throwaway input and shut thread
                 if (not self.timeoutThread.isActiveNow()):
@@ -41,11 +40,21 @@ class CommandThread(Thread):
                     commandNotGiven = False
                 # Stop current private chat
                 elif command == "stopprivate":
-                    throwaway = True
+                    msg = ("stopPrivateRegular " + self.username)
+                    # Choose whether to send through our own dm socket, or other clients dm socket
+                    if self.isDmServer:
+                        self.dmOtherSocket.send(msg.encode())
+                        # Also let server know that private chat is over
+                        send("stopprivate", self.clientSocket, self.timeoutThread.isActiveNow())
+                    else:
+                        self.dmClientSocket.send(msg.encode())
+                        message = send("stopprivate", self.clientSocket, self.timeoutThread.isActiveNow())
+
                 # Send a message to current private chat
                 elif command == "private":
-                    msg = arglist[1]
-                    msg = (self.username + "(private): " + msg)
+                    user = arglist[1]
+                    message = message[8+len(user):]
+                    msg = (self.username + "(private): " + message)
                     # Choose whether to send through our own dm socket, or other clients dm socket
                     if self.isDmServer:
                         self.dmOtherSocket.send(msg.encode())
@@ -56,6 +65,18 @@ class CommandThread(Thread):
                     # If responds yes to a private message request, you are designated server in p2p
                     if command == "y":
                         self.isDmServer = True
+                    # If logging out, make sure that dms are closed properly
+                    if command == "logout":
+                        try:
+                            self.dmOtherSocket.send("stopPrivateLogout".encode())
+                        except:
+                            throwaway = True
+                        try: 
+                            self.dmClientSocket.send("stopPrivateLogout".encode())
+                        except:
+                            throwaway = True    
+                            
+                    time.sleep(0.4)
                     message = send(message, self.clientSocket, self.timeoutThread.isActiveNow())
                     commandNotGiven = False
 
@@ -67,13 +88,14 @@ class CommandThread(Thread):
             self.isActive = False
         elif message == "logout confirmed":
             print("[recv] You can logout now")
+            self.dmOtherSocket.close()
+            self.dmClientSocket.close()
             self.isActive = False
         elif message == "provide port":
             
             message = send(self.dmPort, self.clientSocket, self.timeoutThread.isActiveNow())
         else:
-            print("[recv] Message makes no sense")
-            print(message)
+            print("Error. Invalid command")
             ans = input('\nDo you want to continue(y/n) :')
             if ans == 'y':
                 send(("continue"), self.clientSocket, self.timeoutThread.isActiveNow())

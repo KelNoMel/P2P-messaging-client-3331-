@@ -66,7 +66,7 @@ msgThread = MsgThread(clientSocket, cmdThread, dmClientSocket)
 msgThread.start()
 
 # Start private session listener
-dmThread = DmListenerThread(dmServerSocket, serverHost, cmdThread)
+dmThread = DmListenerThread(dmServerSocket, serverHost, cmdThread, dmServerPort)
 dmThread.start()
 
 
@@ -78,7 +78,7 @@ while (True):
     if (not timeoutThread.isActive or not cmdThread.isActive):
         timeoutThread.isActive = False
         cmdThread.isActive = False
-        dmThread.isActive = False
+        dmThread.stop()
         # close the socket
         print("Logged Out")
         clientSocket.close()

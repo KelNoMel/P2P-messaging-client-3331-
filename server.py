@@ -57,7 +57,7 @@ class Server:
         senderSckt = self.userSockets[sender]
         # If user has never been registered with the server, don't continue and inform sender
         if user not in self.mailbox:
-            send(("MSG Requested user \"" + user + "\" is not a user of the server yet"), senderSckt)
+            send(("MSG Error. Requested user \"" + user + "\" is an invalid user"), senderSckt)
         # If user is registered and offline, make it an offline message and send to mailbox, inform sender
         elif (user in self.mailbox) and (user not in self.userSockets):
             dictListAddEntry(user, self.mailbox, msg)
@@ -114,6 +114,9 @@ class Server:
     # Given a sender and a user, attempt to setup private messaging
     def setupDmInvite(self, sender, user):
         noIssuesSoFar = True
+        if sender in self.blocks[user]:
+            send("MSG Error. Cannot private message users who have blocked you", self.userSockets[sender])
+            noIssuesSoFar = False
         # Check if both users are available for a private session
         for pair in self.dms:
             if sender in pair:
@@ -127,35 +130,34 @@ class Server:
         if noIssuesSoFar:
             # Create an entry in dms, with both parties and the status of the connection as "invite"
             self.dms.append(list((sender, user, "invite")))
-            send("MSG " + user + " would like to private message, enter y or n: ", self.userSockets[user])
+            send("MSG " + sender + " would like to private message, enter y or n: ", self.userSockets[user])
 
     # If a user accepts a private session invitation, exchange names and sockets between users
     def setupDmFinalise(self, sender, user):
-
         if (list((sender, user, "invite")) not in self.dms):
             print("ERROR: dms pair not found")
         else:
-            send("DMS info " + user + " " + self.userSockets[user], self.userSockets[sender])
             send("DMS info " + sender + " " + self.userSockets[sender], self.userSockets[user])
             # Update status of pairing
             for pair in self.dms:
                 if sender in pair and user in pair:
                     pair[2] = "In usage"
-        
-        
-
 
     # Removes dm in dm dictionary, and sends appropriate messages to parties, TODO add more context messages
     def removeDm(self, sender):
         for pair in self.dms:
             if (sender in pair):
+                print(pair)
                 send("MSG successfully ended connection", self.userSockets[sender])
                 partner = ""
                 # Look for partner in dms entry
                 for entry in pair:
                     if entry in self.userSockets and entry != sender:
                         partner = entry
-                send("MSG private session ended", self.userSockets[partner])
+                status = pair[2]       
+                send(("MSG private session ended by " + sender), self.userSockets[partner])
+                if status == "In usage":
+                    send(("DMS stop"), self.userSockets[partner])
                 self.dms.remove(pair)
 
             
@@ -267,8 +269,10 @@ class ClientThread(Thread):
                 else:
                     dictListAddEntry(self.name, self.owningServer.blocks, user)
                     sendMessage = "MSG " + user + " is blocked"
-                    send(("CMD awaiting command"), self.clientSocket)
                 send(sendMessage, self.clientSocket)
+                time.sleep(0.5)
+                send(("CMD awaiting command"), self.clientSocket)
+
             
             elif command == "unblock":
                 user = arglist[1]
@@ -276,32 +280,60 @@ class ClientThread(Thread):
                 if user == self.name:
                     sendMessage = "MSG Error. Self cannot have been blocked"
                 # Can't block those who are already blocked
-                elif user in self.owningServer.blocks[self.name]:
+                elif user not in self.owningServer.blocks[self.name]:
                     sendMessage = "MSG Error. " + user + " was not blocked"
                 # Checks passed, continue to blocking
                 else:
                     dictListRemoveEntry(self.name, self.owningServer.blocks, user)
                     sendMessage = "MSG " + user + " is unblocked"
-                    send(("CMD awaiting command"), self.clientSocket)
                 send(sendMessage, self.clientSocket)
+                time.sleep(0.5)
+                send(("CMD awaiting command"), self.clientSocket)
             
             # Send a request to start a private, let server handle matching
             elif command == "startprivate":
                 user = arglist[1]
-                self.owningServer.setupDmInvite(self.name, user)
-                time.sleep(0.5)
-                send(("CMD awaiting command"), self.clientSocket)
-            
-            elif command == "y":
-                user = arglist[1]
-                if list((user, self.name, "invite")) in self.dms:
-                    self.owningServer.setupDmFinalise(self.name, user)
+                if user == self.name:
+                    print("Error. You can't start a private session with yourself")
+                    send(("CMD awaiting command"), self.clientSocket)
+                else:
+                    self.owningServer.setupDmInvite(self.name, user)
                     time.sleep(0.5)
+                    send(("CMD awaiting command"), self.clientSocket)
+
+            # Stop the current private chat
+            elif command == "stopprivate":
+                self.owningServer.removeDm(self.name)
+                print("Trying to delete pair")
+            
+            # Recieved permission to share users port for private chat
+            elif command == "y":
+                user = ""
+                # Get user, the one who sent invite is always in 1st index
+                for pairs in self.owningServer.dms:
+                    if self.name in pairs:
+                        user = pairs[0]
+                if list((user, self.name, "invite")) in self.owningServer.dms:
+                    port = sendAndReceive(("CMD provide port"), self.clientSocket)
+                    send(("DMS info " + self.name + " " + port), self.owningServer.userSockets[user])
                     send(("CMD awaiting command"), self.clientSocket)
                 else:
                     print("[recv] Unknown Message '", message, "'")
                     send(("CMD unknown message"), self.clientSocket)
 
+            elif command == "n":
+                user = ""
+                # Get user, the one who sent invite is always in 1st index
+                for pairs in self.owningServer.dms:
+                    if self.name in pairs:
+                        user = pairs[0]
+                if list((user, self.name, "invite")) in self.owningServer.dms:
+                    send(("MSG requested user " + self.name + " denied private chat request"), self.owningServer.userSockets[user])
+                    self.owningServer.removeDm(self.name)
+                    send(("CMD awaiting command"), self.clientSocket)
+                else:
+                    print("[recv] Unknown Message '", message, "'")
+                    send(("CMD unknown message"), self.clientSocket)
             
             elif command == "continue":
                 send(("CMD awaiting command"), self.clientSocket)

@@ -127,7 +127,7 @@ class Server:
         if noIssuesSoFar:
             # Create an entry in dms, with both parties and the status of the connection as "invite"
             self.dms.append(list((sender, user, "invite")))
-            send("MSG " + user + " would like to private message, enter y or n: ", self.userSockets[user])
+            send("MSG " + sender + " would like to private message, enter y or n: ", self.userSockets[user])
 
     # If a user accepts a private session invitation, exchange names and sockets between users
     def setupDmFinalise(self, sender, user):
@@ -135,7 +135,6 @@ class Server:
         if (list((sender, user, "invite")) not in self.dms):
             print("ERROR: dms pair not found")
         else:
-            send("DMS info " + user + " " + self.userSockets[user], self.userSockets[sender])
             send("DMS info " + sender + " " + self.userSockets[sender], self.userSockets[user])
             # Update status of pairing
             for pair in self.dms:
@@ -293,15 +292,19 @@ class ClientThread(Thread):
                 send(("CMD awaiting command"), self.clientSocket)
             
             elif command == "y":
-                user = arglist[1]
-                if list((user, self.name, "invite")) in self.dms:
-                    self.owningServer.setupDmFinalise(self.name, user)
-                    time.sleep(0.5)
+                user = ""
+                # Get user, the one who sent invite is always in 1st index
+                for pairs in self.owningServer.dms:
+                    if self.name in pairs:
+                        user = pairs[0]
+                print(list((user, self.name, "invite")))
+                if list((user, self.name, "invite")) in self.owningServer.dms:
+                    port = sendAndReceive(("CMD provide port"), self.clientSocket)
+                    send(("DMS info " + self.name + " " + port), self.owningServer.userSockets[user])
                     send(("CMD awaiting command"), self.clientSocket)
                 else:
                     print("[recv] Unknown Message '", message, "'")
                     send(("CMD unknown message"), self.clientSocket)
-
             
             elif command == "continue":
                 send(("CMD awaiting command"), self.clientSocket)

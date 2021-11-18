@@ -6,12 +6,16 @@ import time
 
 # Thread to print out broadcasts from server/public messages from other user
 class CommandThread(Thread):
-    def __init__(self, clientSocket, timeout):
+    def __init__(self, clientSocket, timeout, dmSocket, dmPort, dmServerSocket):
         Thread.__init__(self)
         self.clientSocket = clientSocket
         self.timeoutThread = timeout
         self.isActive = True
         self.command = "default"
+        self.dmSocket = dmSocket
+        self.dmPort = dmPort
+        self.dmServerSocket = dmServerSocket
+        self.isDmServer = False
         
     def newCmd(self, message):
         self.command = message
@@ -20,26 +24,34 @@ class CommandThread(Thread):
         #print(message)
         # The user is able to start a new command
         if message == "awaiting command":
-            serverNotContacted = True
-            while (serverNotContacted):
+            commandNotGiven = True
+            while (commandNotGiven):
                 self.timeoutThread.resetTimer()
                 message = input("===input any command===\n")
-                command = re.search("^[a-z]*", message)
-                command = command.group()
+                arglist = message.split()
+                command = arglist[0]
                 # If user was inactive, throwaway input and shut thread
                 if (not self.timeoutThread.isActiveNow()):
                     self.isActive = False
-                    serverNotContacted = False
+                    commandNotGiven = False
+                # If responds yes to a private message request, you are designated server in p2p
+                elif command == "y":
+                    self.isDmServer = True
                 # Stop current private chat
                 elif command == "stopprivate":
                     throwaway = True
                 # Send a message to current private chat
                 elif command == "private":
-                    throwaway = True
+                    msg = arglist[1]
+                    msg = (self.name + "(private): " + msg)
+                    if self.isDmServer:
+                        send(msg, self.dmServerSocket, self.timeoutThread.isActiveNow())
+                    else:
+                        send(msg, self.dmSocket, self.timeoutThread.isActiveNow())
                 # Command was not associated with private chat, assume it is for server
                 else:
                     message = send(message, self.clientSocket, self.timeoutThread.isActiveNow())
-                    serverNotContacted = False
+                    commandNotGiven = False
 
         elif message == "":
             print("[recv] Message from server is empty!")
@@ -50,6 +62,9 @@ class CommandThread(Thread):
         elif message == "logout confirmed":
             print("[recv] You can logout now")
             self.isActive = False
+        elif message == "provide port":
+            
+            message = send(self.dmPort, self.clientSocket, self.timeoutThread.isActiveNow())
         else:
             print("[recv] Message makes no sense")
             print(message)
@@ -71,4 +86,4 @@ class CommandThread(Thread):
                 self.command = "default"
                 self.timeoutThread.resetTimer()
                 self.handleCmd(commandSave)
-        
+            

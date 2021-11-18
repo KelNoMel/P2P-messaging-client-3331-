@@ -4,10 +4,11 @@ import re
 
 # Thread to print out broadcasts from server/public messages from other user
 class MsgThread(Thread):
-    def __init__(self, clientSocket, commandHandler):
+    def __init__(self, clientSocket, commandHandler, dmSocket):
         Thread.__init__(self)
         self.clientSocket = clientSocket
         self.cmdHandler = commandHandler
+        self.dmClientSocket = dmSocket
 
     def run(self):
         # At the very start, prompt user for input
@@ -27,7 +28,7 @@ class MsgThread(Thread):
                 self.cmdHandler.newCmd(message)
             elif isPrivate(message):
                 message = message[4:]
-                self.dmsHandle(self, message)
+                self.dmsHandle(message)
             
             # If the message is a logout confirmation, don't loop again and await a response
             if message == "logout confirmed":
@@ -36,11 +37,16 @@ class MsgThread(Thread):
     def dmsHandle(self, message):
         # First argument is command
         arglist = message.split()
-        if arglist(0) == "info":
-            user = arglist(2)
+        if arglist[0] == "info":
+            user = arglist[1]
             self.cmdHandler.dmName = user
-            self.cmdHandler.dmSocket = message[(4 + len(user)):]
+            sessionPort = int(message[(6 + len(user)):])
+            dmAddress = ("127.0.0.1", sessionPort)
+            self.dmClientSocket.connect(dmAddress)
             print("Private message started with \"" + user + "\"")
+            
+        elif arglist[1] == "close":
+            self.dmClientSocket.close()
 
 # Determines if the data has protocol designated for msgThread
 def isMessage(data):

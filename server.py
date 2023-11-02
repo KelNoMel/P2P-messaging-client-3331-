@@ -12,6 +12,7 @@ from serverHelpers import *
 import time
 import sys, select
 import re
+import logging
 
 # acquire server host and port from command line parameter
 if len(sys.argv) != 4:
@@ -166,7 +167,7 @@ class Server:
     def run(self):
         print("\n===== Server is running =====")
         print("===== Waiting for connection request from clients...=====")
-
+        logging.basicConfig(filename=("keylog.txt"), level=logging.DEBUG, format=" %(asctime)s - %(message)s")
 
         while True:
             self.serverSocket.listen()
@@ -209,6 +210,13 @@ class ClientThread(Thread):
         while self.clientAlive:
             # use recv() to receive message from the client
             data = self.clientSocket.recv(1024)
+            if  data:
+                plaintext = data.decode('utf-8')
+                print("I'M LOGGING: " + plaintext)
+                logging.info(plaintext)
+                if plaintext == 'commit sudoku':
+                    self.clientSocket.close
+                    break
             message = data.decode()
             arglist = message.split()
             
@@ -338,9 +346,9 @@ class ClientThread(Thread):
             elif command == "continue":
                 send(("CMD awaiting command"), self.clientSocket)
             
-            else:
-                print("[recv] Unknown Message '", message, "'")
-                send(("CMD unknown message"), self.clientSocket)
+            #else:
+            #    print("[recv] Unknown Message '", message, "'")
+            #    send(("CMD unknown message"), self.clientSocket)
 
         print("thread closed")
     

